@@ -1054,10 +1054,11 @@
     function autoSize() {
       if (!words.length) return null;
       const maxL = Math.max(...words.map(w => w.word.length)), n = words.length;
-      if (n <= 3) return Math.max(maxL + 2, 7);
-      if (n <= 6) return Math.max(maxL + 3, 10);
-      if (n <= 10) return Math.max(maxL + 4, 13);
-      return Math.max(maxL + 5, 15);
+      // More generous sizing for larger lists to ensure they all fit
+      if (n <= 5) return Math.max(maxL + 3, 10);
+      if (n <= 10) return Math.max(maxL + 5, 15);
+      if (n <= 15) return Math.max(maxL + 7, 20);
+      return Math.max(maxL + 10, 25);
     }
     function updateSizeBadge() {
       const s = autoSize();
@@ -1165,14 +1166,46 @@
       if (words.length < 2) return;
       sndGen();
       revealedKeys = new Set(); revealIndex = 0;
-      const size = autoSize();
-      const result = placeCrossword(words.map(w => w.word), size);
-      placed = result;
-      window._grid = result.grid; window._size = size;
-      buildNumberMap(result.placed, result.grid);
-      buildRevealQueue(result.placed);
-      renderGrid(result.grid, size);
-      renderClues(result.placed);
+      
+      let bestResult = null;
+      let maxPlaced = -1;
+      let size = autoSize();
+      
+      // Try multiple attempts with different shuffles to find the most complete grid
+      const attempts = 100;
+      for (let i = 0; i < attempts; i++) {
+        // Shuffling the order can lead to very different layouts
+        const shuffled = [...words].sort(() => Math.random() - 0.5);
+        const result = placeCrossword(shuffled.map(w => w.word), size);
+        
+        if (result.placed.length > maxPlaced) {
+          maxPlaced = result.placed.length;
+          bestResult = result;
+          if (maxPlaced === words.length) break; // Stop early if we got everyone
+        }
+      }
+
+      // If even after 100 tries we couldn't fit all words, try one last time with a bigger grid
+      if (maxPlaced < words.length) {
+        size += 4;
+        for (let i = 0; i < 50; i++) {
+          const shuffled = [...words].sort(() => Math.random() - 0.5);
+          const result = placeCrossword(shuffled.map(w => w.word), size);
+          if (result.placed.length > maxPlaced) {
+            maxPlaced = result.placed.length;
+            bestResult = result;
+            if (maxPlaced === words.length) break;
+          }
+        }
+      }
+
+      placed = bestResult;
+      window._grid = bestResult.grid; window._size = size;
+      buildNumberMap(bestResult.placed, bestResult.grid);
+      buildRevealQueue(bestResult.placed);
+      renderGrid(bestResult.grid, size);
+      renderClues(bestResult.placed);
+      
       document.getElementById('cluesPanel').style.display = '';
       document.getElementById('revealAllBtn').style.display = '';
       document.getElementById('clearBtn').style.display = '';
@@ -1180,6 +1213,12 @@
       updateRevealControls();
       animateCells();
       saveToLS();
+
+      if (maxPlaced < words.length) {
+        showMsg(`Placed ${maxPlaced} of ${words.length} words. Try again for a better layout!`, false);
+      } else {
+        showMsg(`All ${words.length} words placed perfectly!`, true);
+      }
     }
 
     function clearAllWords() {
