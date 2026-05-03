@@ -698,6 +698,11 @@
     <header class="site-header">
       <h1 class="site-name">Naraparaju</h1>
       <p class="site-sub">Crossword Builder &nbsp;·&nbsp; शब्द पहेली</p>
+      <div style="margin-top:12px; display:flex; justify-content:center; gap:10px;">
+        <button class="btn btn-ghost" style="height:30px; font-size:0.75rem; border-color:var(--accent); color:var(--accent);" onclick="copyShareLink()">
+          <span id="shareBtnLabel">🔗 Share / Sync across devices</span>
+        </button>
+      </div>
       <div class="header-divider"></div>
     </header>
 
@@ -894,9 +899,62 @@
       } catch (e) { }
     }
 
+    /* ══════════ URL SYNC (NO DATABASE) ══════════ */
+    function pack(obj) {
+      return window.btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+    }
+    function unpack(str) {
+      try { return JSON.parse(decodeURIComponent(escape(window.atob(str)))); } catch (e) { return null; }
+    }
+
+    function checkURLSync() {
+      const hash = window.location.hash;
+      if (hash.startsWith('#data=')) {
+        const encoded = hash.substring(6);
+        const decoded = unpack(encoded);
+        if (decoded && Array.isArray(decoded)) {
+          if (confirm(`Sync data from link? This will add ${decoded.length} words to your list.`)) {
+            // Merge or Replace? Let's replace if list is empty, otherwise merge
+            if (words.length === 0) {
+              words = decoded;
+            } else {
+              decoded.forEach(wObj => {
+                if (!words.some(x => x.word === wObj.word)) words.push(wObj);
+              });
+            }
+            renderWordList();
+            updateSizeBadge();
+            saveToLS();
+            window.location.hash = ''; // Clear hash after import
+            showMsg('Synced successfully!', true);
+          }
+        }
+      }
+    }
+
+    function copyShareLink() {
+      if (words.length === 0) {
+        showMsg('Add some words first!', false);
+        return;
+      }
+      const data = pack(words);
+      const url = window.location.origin + window.location.pathname + '#data=' + data;
+      
+      navigator.clipboard.writeText(url).then(() => {
+        const lbl = document.getElementById('shareBtnLabel');
+        const old = lbl.textContent;
+        lbl.textContent = '✅ Link copied to clipboard!';
+        setTimeout(() => lbl.textContent = old, 3000);
+        showMsg('Shareable link copied!', true);
+      }).catch(() => {
+        alert('Failed to copy. Please copy from URL bar: ' + url);
+      });
+    }
+
     /* ══════════ INIT ══════════ */
     window.addEventListener('DOMContentLoaded', () => {
       loadFromLS();
+      checkURLSync(); // Check for shared data before rendering
       renderWordList();
       updateSizeBadge();
       document.getElementById('genBtn').disabled = words.length < 2;
